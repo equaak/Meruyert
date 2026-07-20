@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ALLOWED_DAYS = new Set([7, 14, 30]);
+const ALLOWED_DAYS = new Set([1, 7, 14, 30, 730]);
 
 export default async function KaspiTovaryPage({
   searchParams,
@@ -135,9 +135,11 @@ function buildKpis(d: ProductsABCData): KpiItem[] {
 
 function PeriodSelector({ value }: { value: number }) {
   const opts = [
+    { v: 1, label: "Сегодня" },
     { v: 7, label: "7 дней" },
     { v: 14, label: "14 дней" },
     { v: 30, label: "30 дней" },
+    { v: 730, label: "Всё время" },
   ];
   return (
     <div className="flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] p-0.5">

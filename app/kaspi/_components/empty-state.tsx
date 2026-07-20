@@ -11,7 +11,7 @@ export function KaspiEmptyState({ days, config }: { days: number; config: KaspiC
       <div className="flex flex-col items-center text-center">
         <InboxIcon className="h-8 w-8 text-[var(--text-subtle)]" />
         <h3 className="mt-2 text-[14px] font-medium text-[var(--text)]">
-          За последние {days} дней — нет заказов на Kaspi Marketplace
+          {days === 1 ? "Сегодня" : `За последние ${days} дней`} — нет заказов на Kaspi Marketplace
         </h3>
         <p className="mt-2 max-w-lg text-[12px] text-[var(--text-dim)]">
           Токен API подключён и работает (HTTP 200 от <code className="rounded bg-white/[0.06] px-1">/orders</code>),

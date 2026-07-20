@@ -331,45 +331,73 @@ async function fetchOrdersPage(params: {
   return res.json();
 }
 
+/** Runs `fn` over `items` with at most `limit` calls in flight at once. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+/** Fetch all pages for one (window, state) pair. */
+async function fetchStateAllPages(fromMs: number, toMs: number, state: string): Promise<{ id?: string; attributes?: KaspiOrderAttrs }[]> {
+  const items: { id?: string; attributes?: KaspiOrderAttrs }[] = [];
+  let pageNumber = 0;
+  while (true) {
+    const data = await fetchOrdersPage({ pageNumber, fromMs, toMs, state });
+    items.push(...(data.data ?? []));
+    const pageCount = data.meta?.pageCount ?? 1;
+    pageNumber++;
+    if (pageNumber >= pageCount) break;
+  }
+  return items;
+}
+
 /** Fetch all orders in a single 14-day window (across all states), paginated. */
 async function fetchWindowAllStates(fromMs: number, toMs: number): Promise<KaspiOrder[]> {
   // We need orders across all states. The API REQUIRES filter[orders][state].
-  // Strategy: iterate every state value, dedupe by order id.
+  // Strategy: query every state value in parallel, dedupe by order id.
   const STATES = ['NEW', 'SIGN_REQUIRED', 'PICKUP', 'DELIVERY', 'KASPI_DELIVERY', 'ARCHIVE'];
   const byId = new Map<string, KaspiOrder>();
 
-  for (const state of STATES) {
-    let pageNumber = 0;
-    while (true) {
-      const data = await fetchOrdersPage({ pageNumber, fromMs, toMs, state });
-      const items = data.data ?? [];
-      for (const raw of items) {
-        const id = raw.id ?? '';
-        const a = raw.attributes ?? {};
-        if (!id || !a.code || a.creationDate == null) continue;
-        const fullName = [a.customer?.firstName, a.customer?.lastName].filter(Boolean).join(' ').trim();
-        byId.set(id, {
-          id,
-          code: a.code,
-          date: new Date(a.creationDate).toISOString(),
-          total: a.totalPrice ?? 0,
-          deliveryCost: a.deliveryCost ?? 0,
-          deliveryCostForSeller: a.deliveryCostForSeller ?? 0,
-          status: a.status ?? 'UNKNOWN',
-          state: a.state ?? state,
-          cancellationReason: a.cancellationReason ?? null,
-          paymentMode: a.paymentMode ?? null,
-          creditTerm: a.creditTerm ?? null,
-          deliveryMode: a.deliveryMode ?? null,
-          isKaspiDelivery: !!a.isKaspiDelivery,
-          customerName: fullName || null,
-          customerPhone: a.customer?.cellPhone ?? null,
-          deliveryCity: a.deliveryAddress?.town ?? null,
-        });
-      }
-      const pageCount = data.meta?.pageCount ?? 1;
-      pageNumber++;
-      if (pageNumber >= pageCount) break;
+  const perState = await Promise.all(STATES.map((state) => fetchStateAllPages(fromMs, toMs, state)));
+
+  for (let i = 0; i < STATES.length; i++) {
+    const state = STATES[i];
+    for (const raw of perState[i]) {
+      const id = raw.id ?? '';
+      const a = raw.attributes ?? {};
+      if (!id || !a.code || a.creationDate == null) continue;
+      // Kaspi's `state` buckets (esp. ARCHIVE) don't reliably honor the
+      // creationDate filter — they can return orders that transitioned into
+      // that state within [fromMs,toMs] but were created earlier. Enforce
+      // the real creation-date bound client-side so period counts stay accurate.
+      if (a.creationDate < fromMs || a.creationDate > toMs) continue;
+      const fullName = [a.customer?.firstName, a.customer?.lastName].filter(Boolean).join(' ').trim();
+      byId.set(id, {
+        id,
+        code: a.code,
+        date: new Date(a.creationDate).toISOString(),
+        total: a.totalPrice ?? 0,
+        deliveryCost: a.deliveryCost ?? 0,
+        deliveryCostForSeller: a.deliveryCostForSeller ?? 0,
+        status: a.status ?? 'UNKNOWN',
+        state: a.state ?? state,
+        cancellationReason: a.cancellationReason ?? null,
+        paymentMode: a.paymentMode ?? null,
+        creditTerm: a.creditTerm ?? null,
+        deliveryMode: a.deliveryMode ?? null,
+        isKaspiDelivery: !!a.isKaspiDelivery,
+        customerName: fullName || null,
+        customerPhone: a.customer?.cellPhone ?? null,
+        deliveryCity: a.deliveryAddress?.town ?? null,
+      });
     }
   }
 
@@ -378,16 +406,19 @@ async function fetchWindowAllStates(fromMs: number, toMs: number): Promise<Kaspi
 
 /** Fetch orders across an arbitrary date range, chunked into 14-day windows. */
 async function fetchOrdersInRange(fromMs: number, toMs: number): Promise<KaspiOrder[]> {
-  const out: KaspiOrder[] = [];
-  let cursor = fromMs;
   const stepMs = MAX_RANGE_DAYS * 86400_000 - 60_000; // leave 1m safety margin
+  const windows: [number, number][] = [];
+  let cursor = fromMs;
   while (cursor < toMs) {
     const chunkEnd = Math.min(cursor + stepMs, toMs);
-    const chunkOrders = await fetchWindowAllStates(cursor, chunkEnd);
-    out.push(...chunkOrders);
+    windows.push([cursor, chunkEnd]);
     cursor = chunkEnd + 1;
   }
-  return out;
+  // Long ranges ("all time") can span dozens of 14-day windows — fetch a few
+  // at a time so it finishes well inside the serverless time budget without
+  // firing everything at once.
+  const chunkResults = await mapLimit(windows, 4, ([from, to]) => fetchWindowAllStates(from, to));
+  return chunkResults.flat();
 }
 
 // ─────────────────────────── Aggregation core ────────────────────────────

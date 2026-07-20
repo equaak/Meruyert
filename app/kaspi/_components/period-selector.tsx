@@ -5,11 +5,13 @@ import { useTransition, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const OPTIONS = [
+  { value: 1,  label: "Сегодня" },
   { value: 7,  label: "7 дн" },
   { value: 14, label: "14 дн" },
   { value: 30, label: "Месяц" },
   { value: 60, label: "60 дн" },
   { value: 90, label: "90 дн" },
+  { value: 730, label: "Всё время" },
 ];
 
 export function KaspiPeriodSelector({

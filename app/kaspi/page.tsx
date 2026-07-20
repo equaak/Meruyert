@@ -14,7 +14,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ALLOWED_DAYS = new Set([7, 14, 30, 60, 90]);
+const ALLOWED_DAYS = new Set([1, 7, 14, 30, 60, 90, 730]);
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function pct(curr: number, prev: number): number {

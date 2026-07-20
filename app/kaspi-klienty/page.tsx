@@ -9,7 +9,7 @@ import { ShareBar } from "@/components/page/share-bar";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-const ALLOWED_DAYS = new Set([1, 7, 14, 30, 60, 90]);
+const ALLOWED_DAYS = new Set([1, 7, 14, 30, 60, 90, 730]);
 
 export default async function KaspiCustomersPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const sp = await searchParams;

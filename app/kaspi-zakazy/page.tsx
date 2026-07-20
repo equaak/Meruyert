@@ -12,7 +12,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ALLOWED_DAYS = new Set([1, 7, 14, 30, 60, 90]);
+const ALLOWED_DAYS = new Set([1, 7, 14, 30, 60, 90, 730]);
 const ALLOWED_FILTERS = new Set(['all', 'completed', 'cancelled', 'returned', 'in_progress']);
 
 export default async function KaspiOrdersPage({ searchParams }: { searchParams: Promise<{ days?: string; filter?: string }> }) {

@@ -45,3 +45,8 @@ SECRETS*.md
 
 # playwright debug artifacts (may contain merchant/session data)
 .playwright-mcp/
+.env*
+
+
+# claude folder
+/.claude
